@@ -1,0 +1,12 @@
+{
+  "COURSES" : {
+    "12345" : ["A", "B"]
+  },
+  "TELEGRAM_IDS" : {
+    "A" : 123,
+    "B" : 234
+  },
+  "TERM_ID": "1234",
+  "DEPT_CODE": "CSE",
+  "BOT_TOKEN": ""
+}
