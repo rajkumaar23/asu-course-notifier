@@ -9,26 +9,29 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"sync"
 )
 
+type Class struct {
+	Details struct {
+		ClassNumber string   `json:"CLASSNBR"`
+		Title       string   `json:"TITLE"`
+		Term        string   `json:"STRM"`
+		Instructors []string `json:"INSTRUCTORSLIST"`
+	} `json:"CLAS"`
+	SeatInfo struct {
+		EnrollmentCap   int `json:"ENRL_CAP"`
+		EnrollmentTotal int `json:"ENRL_TOT"`
+	} `json:"seatInfo"`
+	ReservedSeatsInfo []struct {
+		EnrollmentCap   int `json:"ENRL_CAP"`
+		EnrollmentTotal int `json:"ENRL_TOT"`
+	} `json:"reservedSeatsInfo"`
+	SubjectNumber string `json:"SUBJECTNUMBER"`
+}
+
 type CourseCatalogResponse struct {
-	Classes []struct {
-		Class struct {
-			ClassNumber string   `json:"CLASSNBR"`
-			Title       string   `json:"TITLE"`
-			Term        string   `json:"STRM"`
-			Instructors []string `json:"INSTRUCTORSLIST"`
-		} `json:"CLAS"`
-		SeatInfo struct {
-			EnrollmentCap   int `json:"ENRL_CAP"`
-			EnrollmentTotal int `json:"ENRL_TOT"`
-		} `json:"seatInfo"`
-		ReservedSeatsInfo []struct {
-			EnrollmentCap   int `json:"ENRL_CAP"`
-			EnrollmentTotal int `json:"ENRL_TOT"`
-		} `json:"reservedSeatsInfo"`
-		SubjectNumber string `json:"SUBJECTNUMBER"`
-	} `json:"classes"`
+	Classes []Class `json:"classes"`
 }
 
 type Config struct {
@@ -53,6 +56,35 @@ func GetParamsForCourseCatalog(config Config) string {
 	return params.Encode()
 }
 
+func NotifyUser(telegramID int, user string, message string, class Class, client *http.Client, config Config) {
+	defer waitGroup.Done()
+
+	params := url.Values{}
+	params.Set("chat_id", strconv.Itoa(telegramID))
+	params.Set("text", message)
+	params.Set("parse_mode", "HTML")
+	telegramURL := fmt.Sprintf("https://api.telegram.org/%v/sendMessage?%v", config.BotToken, params.Encode())
+
+	req, _ := http.NewRequest(http.MethodGet, telegramURL, nil)
+	res, err := client.Do(req)
+	body, _ := io.ReadAll(res.Body)
+	defer res.Body.Close()
+
+	errorMessagePrefix := fmt.Sprintf("Sending message to %v for %v failed :", user, class.Details.Title)
+	if res.StatusCode != 200 {
+		fmt.Println(errorMessagePrefix, string(body))
+		return
+	}
+	if err != nil {
+		fmt.Println(errorMessagePrefix, err)
+		return
+	}
+
+	fmt.Println("Sent message to", user, "for", class.Details.Title, "(", class.SubjectNumber, ")")
+}
+
+var waitGroup sync.WaitGroup
+
 func main() {
 	configFileContents, err := os.ReadFile("config.json")
 	if err != nil {
@@ -67,9 +99,11 @@ func main() {
 		"https://eadvs-cscc-catalog-api.apps.asu.edu/catalog-microservices/api/v1/search/classes?%v",
 		GetParamsForCourseCatalog(config),
 	)
+
 	client := &http.Client{}
 	req, _ := http.NewRequest(http.MethodGet, courseCatalogURL, nil)
 	req.Header.Set("Authorization", "Bearer null")
+
 	res, err := client.Do(req)
 	if err != nil {
 		panic(err)
@@ -91,39 +125,34 @@ func main() {
 		}
 
 		availableSlots := class.SeatInfo.EnrollmentCap - class.SeatInfo.EnrollmentTotal - reservedAvailability
-		if users, exists := config.CoursesToWatch[class.Class.ClassNumber]; exists && availableSlots > 0 {
+		if users, exists := config.CoursesToWatch[class.Details.ClassNumber]; exists && availableSlots > 0 {
 			applyLink := fmt.Sprintf(
 				"https://go.oasis.asu.edu/addclass/?STRM=%v&ASU_CLASS_NBR=%v",
-				class.Class.Term,
-				class.Class.ClassNumber,
+				class.Details.Term,
+				class.Details.ClassNumber,
 			)
 			swapLink := fmt.Sprintf("https://webapp4.asu.edu/myasu/?action=swapclass&strm=%v", config.TermID)
 			for _, user := range users {
-				telegramID := config.TelegramIDs[user]
-				params := url.Values{}
-				params.Add("chat_id", strconv.Itoa(telegramID))
-				params.Add(
-					"text",
-					fmt.Sprintf(
-						"Hey %v,\n\n%v (%v) by %v is available with %v slots.\n\nClick %v to add to cart.\n\nClick %v to swap with another course.",
-						user,
-						class.Class.Title,
-						class.SubjectNumber,
-						class.Class.Instructors[0],
-						availableSlots,
-						applyLink,
-						swapLink,
-					),
-				)
-				params.Add("parse_mode", "HTML")
-				telegramURL := fmt.Sprintf("https://api.telegram.org/%v/sendMessage?%v", config.BotToken, params.Encode())
-				req, _ = http.NewRequest(http.MethodGet, telegramURL, nil)
-				_, err = client.Do(req)
-				if err != nil {
-					panic(err)
+				telegramID, userExists := config.TelegramIDs[user]
+				if !userExists {
+					fmt.Println("Telegram ID for", user, "could not be found")
+					continue
 				}
-				fmt.Println("Sent message to", user, "for", class.Class.Title, "(", class.SubjectNumber, ")")
+				waitGroup.Add(1)
+				message := fmt.Sprintf(
+					"Hey %v,\n\n%v (%v) by %v is available with %v slots.\n\nClick %v to add to cart.\n\nClick %v to swap with another course.",
+					user,
+					class.Details.Title,
+					class.SubjectNumber,
+					class.Details.Instructors[0],
+					availableSlots,
+					applyLink,
+					swapLink,
+				)
+				fmt.Println("Sending message to", user, "for", class.Details.Title, "(", class.SubjectNumber, ")")
+				go NotifyUser(telegramID, user, message, class, client, config)
 			}
 		}
+		waitGroup.Wait()
 	}
 }
