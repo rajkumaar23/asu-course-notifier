@@ -66,7 +66,7 @@ func NotifyUser(telegramID int, user string, message string, class Class, client
 	params.Set("chat_id", strconv.Itoa(telegramID))
 	params.Set("text", message)
 	params.Set("parse_mode", "HTML")
-	telegramURL := fmt.Sprintf("https://api.telegram.org/%v/sendMessage?%v", config.BotToken, params.Encode())
+	telegramURL := fmt.Sprintf("https://api.telegram.org/bot%v/sendMessage?%v", config.BotToken, params.Encode())
 
 	req, _ := http.NewRequest(http.MethodGet, telegramURL, nil)
 	res, err := client.Do(req)
