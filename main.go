@@ -32,7 +32,8 @@ type Class struct {
 }
 
 type CourseCatalogResponse struct {
-	Classes []Class `json:"classes"`
+	Classes  []Class `json:"classes"`
+	ScrollID string  `json:"scrollId"`
 }
 
 type Config struct {
@@ -43,17 +44,14 @@ type Config struct {
 	BotToken       string              `json:"BOT_TOKEN"`
 }
 
-func GetParamsForCourseCatalog(config Config) string {
+func GetParamsForCourseCatalog(config Config, scrollId string) string {
 	params := url.Values{}
 	params.Add("refine", "Y")
-	params.Add("campusOrOnlineSelection", "A")
-	params.Add("honors", "F")
-	params.Add("level", "grad")
-	params.Add("promod", "F")
-	params.Add("searchType", "all")
 	params.Add("subject", config.DepartmentCode)
 	params.Add("term", config.TermID)
-
+	if scrollId != "" {
+		params.Add("scrollId", scrollId)
+	}
 	return params.Encode()
 }
 
@@ -88,38 +86,7 @@ func NotifyUser(telegramID int, user string, message string, class Class, client
 	fmt.Println(GetFormattedCurrentTime(), ":", "Sent message to", user, "for", class.Details.Title, "(", class.SubjectNumber, ")")
 }
 
-var waitGroup sync.WaitGroup
-
-func main() {
-	configFileContents, err := os.ReadFile("config.json")
-	if err != nil {
-		panic(err)
-	}
-	var config Config
-	if err = json.Unmarshal(configFileContents, &config); err != nil {
-		panic(err)
-	}
-
-	courseCatalogURL := fmt.Sprintf(
-		"https://eadvs-cscc-catalog-api.apps.asu.edu/catalog-microservices/api/v1/search/classes?%v",
-		GetParamsForCourseCatalog(config),
-	)
-
-	client := &http.Client{}
-	req, _ := http.NewRequest(http.MethodGet, courseCatalogURL, nil)
-	req.Header.Set("Authorization", "Bearer null")
-
-	res, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
-	var result CourseCatalogResponse
-	if err = json.Unmarshal(body, &result); err != nil {
-		panic(err)
-	}
-
+func ProcessClasses(result CourseCatalogResponse, config Config, client *http.Client) {
 	for _, class := range result.Classes {
 		reservedAvailability := 0
 		var difference int
@@ -158,6 +125,75 @@ func main() {
 				go NotifyUser(telegramID, user, message, class, client, config)
 			}
 		}
-		waitGroup.Wait()
 	}
+}
+
+var waitGroup sync.WaitGroup
+
+func main() {
+	configFileContents, err := os.ReadFile("config.json")
+	if err != nil {
+		panic(err)
+	}
+	var config Config
+	if err = json.Unmarshal(configFileContents, &config); err != nil {
+		panic(err)
+	}
+
+	courseCatalogBaseURL := "https://eadvs-cscc-catalog-api.apps.asu.edu/catalog-microservices/api/v1/search/classes"
+	courseCatalogURL := fmt.Sprintf(
+		"%v?%v",
+		courseCatalogBaseURL,
+		GetParamsForCourseCatalog(config, ""),
+	)
+
+	client := &http.Client{}
+	req, _ := http.NewRequest(http.MethodGet, courseCatalogURL, nil)
+	req.Header.Set("Authorization", "Bearer null")
+
+	res, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	var result CourseCatalogResponse
+	if err = json.Unmarshal(body, &result); err != nil {
+		panic(err)
+	}
+
+	// Performing our iteration on the 'first' set of classes
+	scrollId := result.ScrollID
+	ProcessClasses(result, config, client)
+
+	// Paginating based on 'scrollId' until we receive no more results
+	for {
+		courseCatalogURL = fmt.Sprintf(
+			"%v?%v",
+			courseCatalogBaseURL,
+			GetParamsForCourseCatalog(config, scrollId),
+		)
+
+		req, _ = http.NewRequest(http.MethodGet, courseCatalogURL, nil)
+		req.Header.Set("Authorization", "Bearer null")
+
+		res, err = client.Do(req)
+		if err != nil {
+			panic(err)
+		}
+		body, _ = io.ReadAll(res.Body)
+		if err = json.Unmarshal(body, &result); err != nil {
+			panic(err)
+		}
+		scrollId = result.ScrollID
+
+		if len(result.Classes) < 1 {
+			// Giving up here, since it does not make sense to go any further
+			break
+		}
+
+		ProcessClasses(result, config, client)
+	}
+
+	waitGroup.Wait()
 }
