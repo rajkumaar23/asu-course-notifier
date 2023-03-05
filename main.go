@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type Class struct {
@@ -56,6 +57,10 @@ func GetParamsForCourseCatalog(config Config) string {
 	return params.Encode()
 }
 
+func GetFormattedCurrentTime() string {
+	return time.Now().Format(time.RFC3339)
+}
+
 func NotifyUser(telegramID int, user string, message string, class Class, client *http.Client, config Config) {
 	defer waitGroup.Done()
 
@@ -72,15 +77,15 @@ func NotifyUser(telegramID int, user string, message string, class Class, client
 
 	errorMessagePrefix := fmt.Sprintf("Sending message to %v for %v failed :", user, class.Details.Title)
 	if res.StatusCode != 200 {
-		fmt.Println(errorMessagePrefix, string(body))
+		fmt.Println(GetFormattedCurrentTime(), ":", errorMessagePrefix, string(body))
 		return
 	}
 	if err != nil {
-		fmt.Println(errorMessagePrefix, err)
+		fmt.Println(GetFormattedCurrentTime(), ":", errorMessagePrefix, err)
 		return
 	}
 
-	fmt.Println("Sent message to", user, "for", class.Details.Title, "(", class.SubjectNumber, ")")
+	fmt.Println(GetFormattedCurrentTime(), ":", "Sent message to", user, "for", class.Details.Title, "(", class.SubjectNumber, ")")
 }
 
 var waitGroup sync.WaitGroup
@@ -135,7 +140,7 @@ func main() {
 			for _, user := range users {
 				telegramID, userExists := config.TelegramIDs[user]
 				if !userExists {
-					fmt.Println("Telegram ID for", user, "could not be found")
+					fmt.Println(GetFormattedCurrentTime(), ":", "Telegram ID for", user, "could not be found")
 					continue
 				}
 				waitGroup.Add(1)
@@ -149,7 +154,7 @@ func main() {
 					applyLink,
 					swapLink,
 				)
-				fmt.Println("Sending message to", user, "for", class.Details.Title, "(", class.SubjectNumber, ")")
+				fmt.Println(GetFormattedCurrentTime(), ":", "Sending message to", user, "for", class.Details.Title, "(", class.SubjectNumber, ")")
 				go NotifyUser(telegramID, user, message, class, client, config)
 			}
 		}
