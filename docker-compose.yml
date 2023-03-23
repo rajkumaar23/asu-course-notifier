@@ -1,0 +1,11 @@
+version: "3"
+
+services:
+  asu-course-notifier:
+    image: ghcr.io/rajkumaar23/asu-course-notifier:main
+    container_name: asu-course-notifier
+    restart: unless-stopped
+    volumes:
+      - </absolute/path/to/config.json>:/app/config.json
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
