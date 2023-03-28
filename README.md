@@ -1,18 +1,24 @@
 # asu-course-notifier
 
-## Docker
+To run asu-course-notifier on your system, follow the steps below :
 
-To run asu-course-notifier on any system, pull the built image from GitHub container registry:
+- Ensure you have `docker` and `docker-compose` installed.
+- Create a directory for storing the config and docker-compose files.
+- Get inside *that* directory.
+- Create `config.json` with the contents resembling the format of this [example config file](https://github.com/rajkumaar23/asu-course-notifier/blob/main/config.example.json).
+- Create `docker-compose.yml` inside the same directory with the content below :
+  - **DO NOT FORGET** to update the `/absolute/path/to/config.json` inside the compose file
+```yaml
+version: "3"
 
-
-```docker
-docker pull ghcr.io/rajkumaar23/asu-course-notifier:main
+services:
+  asu-course-notifier:
+    image: ghcr.io/rajkumaar23/asu-course-notifier:main
+    container_name: asu-course-notifier
+    restart: unless-stopped
+    volumes:
+      - /absolute/path/to/config.json:/app/config.json
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
 ```
-
-Ensure to create `config.json` by copying the format from `config.example.json`. Update the necessary values inside config.json & pass it as a volume when running the container:
-```sh
-docker run -d --restart unless-stopped \
-  -v /absolute/path/to/config.json:/app/config.json \
-  -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro \
-  ghcr.io/rajkumaar23/asu-course-notifier:main
-```
+- Spin up the container with `docker-compose up -d` and enjoy!
