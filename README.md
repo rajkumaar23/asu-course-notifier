@@ -1,5 +1,9 @@
 # asu-course-notifier
 
+# Screenshot
+
+![Screenshot](screenshot.png)
+
 # Setup
 To run asu-course-notifier on your system, follow the steps below :
 
