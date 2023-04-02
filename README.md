@@ -45,7 +45,7 @@ Breaking down each of the options :
   - `"A" : 123` - Here, `"A"` can be any sorta name you would like to call that user. This name will be used to greet them when they receive an alert from the bot. And `123` is their Telegram user ID (**an integer**) which can only be found using another Telegram bot. For instance, one can use [Chat ID Bot](https://t.me/chat_id_echo_bot).
 
 - `DEPT_CODE` & `TERM_ID`
-  - When you visit ASU Class Search website and choose your semester, your address bar would look something like `https://catalog.apps.asu.edu/catalog/classes/classlist?campusOrOnlineSelection=C&honors=F&level=grad&promod=F&searchType=all&subject=CSE&term=2231`.
+  - When you visit ASU Class Search website and choose your semester, your address bar would look something like `https://catalog.apps.asu.edu/catalog/classes/classlist?campusOrOnlineSelection=C&honors=F&level=grad&promod=F&searchType=all&subject=CSE&term=2231`
     - `DEPT_CODE` in our configuration is same as the `subject` parameter (*CSE*) in this URL.
     - `TERM_ID` in our configuration is same as the `term` parameter (*2231*) in this URL.
 
