@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,51 +24,50 @@ func CheckAvailability(classNumber string) {
 
 	res, err := HttpClient.Do(req)
 	if err != nil {
-		panic(err)
+		LogErrorAndPanic(errors.Join(errors.New("Error making request to get course catalog"), err))
 	}
 	defer func(Body io.ReadCloser) {
 		err = Body.Close()
 		if err != nil {
-			PrintlnWithPrefixedTime("Error when closing body", err)
+			LogErrorAndPanic(errors.Join(errors.New("Error closing request body of course catalog"), err))
 		}
 	}(res.Body)
 	body, _ := io.ReadAll(res.Body)
 	var result CourseCatalogResponse
 	if err = json.Unmarshal(body, &result); err != nil {
-		panic(err)
+		LogErrorAndPanic(errors.Join(errors.New("Error making request to get course catalog"), err))
 	}
 
 	if len(result.Classes) > 0 {
 		ProcessClass(result.Classes[0])
 	} else {
-		PrintlnWithPrefixedTime("Length of result.Classes zero for", classNumber)
+		fmt.Println("Length of result.Classes zero for", classNumber)
 	}
 }
 
 func ProcessClass(class Class) {
 	availableSlots := GetAvailableSlots(class)
 	if availableSlots < 1 {
-		PrintlnWithPrefixedTime("Slots unavailable for", class.Details.ClassNumber)
+		fmt.Println("Slots unavailable for", class.Details.ClassNumber)
 		return
 	}
 
-	PrintlnWithPrefixedTime("Slots available for", class.Details.ClassNumber)
+	fmt.Println("Slots available for", class.Details.ClassNumber)
 	users := config.CoursesToWatch[class.Details.ClassNumber]
 	for _, userName := range users {
-		telegramID, userExists := config.TelegramIDs[userName]
-		if !userExists {
-			PrintlnWithPrefixedTime("Telegram ID for", userName, "could not be found")
-			continue
-		}
-
 		WaitGroup.Add(1)
-		PrintlnWithPrefixedTime("Sending message to", userName, "for", class.Details.Title, "(", class.SubjectNumber, ")")
-		go NotifyUser(telegramID, userName, GetFormattedMessageForTelegram(userName, class, availableSlots), class)
+		fmt.Println("Sending message to", userName, "for", class.Details.Title, "(", class.SubjectNumber, ")")
+		go NotifyUser(userName, GetFormattedMessageForTelegram(userName, class, availableSlots), class)
 	}
 }
 
-func NotifyUser(telegramID int, user string, message string, class Class) {
+func NotifyUser(user string, message string, class Class) {
 	defer WaitGroup.Done()
+
+	telegramID, userExists := config.TelegramIDs[user]
+	if !userExists {
+		LogErrorAndPanic(errors.New("Telegram ID for " + user + " could not be found"))
+	}
 
 	params := url.Values{}
 	params.Set("chat_id", strconv.Itoa(telegramID))
@@ -81,19 +81,17 @@ func NotifyUser(telegramID int, user string, message string, class Class) {
 	defer func(Body io.ReadCloser) {
 		err = Body.Close()
 		if err != nil {
-			PrintlnWithPrefixedTime("Error while closing the body", err)
+			LogErrorAndPanic(errors.Join(errors.New("Error closing request body when sending telegram message"), err))
 		}
 	}(res.Body)
 
 	errorMessagePrefix := fmt.Sprintf("Sending message to %v for %v failed :", user, class.Details.Title)
 	if res.StatusCode != 200 {
-		PrintlnWithPrefixedTime(errorMessagePrefix, string(body))
-		return
+		LogErrorAndPanic(errors.New(errorMessagePrefix + string(body)))
 	}
 	if err != nil {
-		PrintlnWithPrefixedTime(errorMessagePrefix, err)
-		return
+		LogErrorAndPanic(errors.Join(errors.New(errorMessagePrefix), err))
 	}
 
-	PrintlnWithPrefixedTime("Sent message to", user, "for", class.Details.Title, "(", class.SubjectNumber, ")")
+	fmt.Println("Sent message to", user, "for", class.Details.Title, "(", class.SubjectNumber, ")")
 }

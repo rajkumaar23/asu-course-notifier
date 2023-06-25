@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/rollbar/rollbar-go"
 	"math"
 	"net/url"
-	"time"
 )
 
 func GetParamsForCourseCatalog(config Config, classNumber string) string {
@@ -54,10 +54,9 @@ func GetAvailableSlots(class Class) int {
 	return class.SeatInfo.EnrollmentCap - class.SeatInfo.EnrollmentTotal - reservedAvailability
 }
 
-func GetFormattedCurrentTime() string {
-	return time.Now().Format(time.RFC3339)
-}
-
-func PrintlnWithPrefixedTime(message ...any) {
-	fmt.Println(GetFormattedCurrentTime(), ":", message)
+func LogErrorAndPanic(err error) {
+	if rollbarToken != "" {
+		rollbar.Error(err)
+	}
+	panic(err)
 }
